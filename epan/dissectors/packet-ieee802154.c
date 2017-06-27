@@ -386,8 +386,7 @@ static int hf_ieee802154_6top_flags_reserved = -1;
 static int hf_ieee802154_6top_code = -1;
 static int hf_ieee802154_6top_sfid = -1;
 static int hf_ieee802154_6top_seqnum = -1;
-static int hf_ieee802154_6top_gab = -1;
-static int hf_ieee802154_6top_gba = -1;
+static int hf_ieee802154_6top_gen = -1;
 static int hf_ieee802154_6top_metadata = -1;
 static int hf_ieee802154_6top_cell_options = -1;
 static int hf_ieee802154_6top_cell_option_tx = -1;
@@ -516,7 +515,7 @@ static gint ett_ieee802154_zigbee = -1;
 static gint ett_ieee802154_zboss = -1;
 static gint ett_ieee802154_p_ie_6top = -1;
 static gint ett_ieee802154_p_ie_6top_version_type = -1;
-static gint ett_ieee802154_p_ie_6top_seqnum_gab_gba = -1;
+static gint ett_ieee802154_p_ie_6top_seqnum_gen = -1;
 static gint ett_ieee802154_p_ie_6top_cell_options = -1;
 static gint ett_ieee802154_p_ie_6top_cell_list = -1;
 static gint ett_ieee802154_p_ie_6top_cell = -1;
@@ -768,31 +767,46 @@ static const value_string ietf_6top_types[] = {
 };
 
 static const value_string ietf_6top_command_identifiers[] = {
-    { IETF_6TOP_CMD_ADD, "Add" },
-    { IETF_6TOP_CMD_DELETE, "Delete" },
-    { IETF_6TOP_CMD_STATUS, "Status" },
-    { IETF_6TOP_CMD_LIST, "List" },
-    { IETF_6TOP_CMD_CLEAR, "Clear" },
+    { IETF_6TOP_CMD_ADD, "ADD" },
+    { IETF_6TOP_CMD_DELETE, "DELETE" },
+    { IETF_6TOP_CMD_RELOCATE, "RELOCATE" },
+    { IETF_6TOP_CMD_COUNT, "COUNT" },
+    { IETF_6TOP_CMD_LIST, "LIST" },
+    { IETF_6TOP_CMD_CLEAR, "CLEAR" },
     { 0, NULL }
 };
 
 static const value_string ietf_6top_return_codes[] = {
     { IETF_6TOP_RC_SUCCESS, "SUCCESS" },
-    { IETF_6TOP_RC_ERR_VER, "ERR_VER" },
-    { IETF_6TOP_RC_ERR_SFID, "ERR_SFID" },
-    { IETF_6TOP_RC_ERR_GEN, "ERR_GEN" },
-    { IETF_6TOP_RC_ERR_BUSY, "ERR_BUSY" },
-    { IETF_6TOP_RC_ERR_NORES, "ERR_NORES" },
-    { IETF_6TOP_RC_ERR_RESET, "ERR_RESET" },
-    { IETF_6TOP_RC_ERR, "ERR" },
+    { IETF_6TOP_RC_ERROR, "ERROR" },
+    { IETF_6TOP_RC_EOL, "EOL" },
+    { IETF_6TOP_RC_RESET, "RESET" },
+    { IETF_6TOP_RC_VER_ERR, "VER_ERR" },
+    { IETF_6TOP_RC_SFID_ERR, "SFID_ERR" },
+    { IETF_6TOP_RC_GEN_ERR, "GEN_ERR" },
+    { IETF_6TOP_RC_BUSY, "BUSY" },
+    { IETF_6TOP_RC_NORES, "NORES" },
+    { IETF_6TOP_RC_CELLLIST_ERR, "CELLLIST_ERR" },
     { 0, NULL }
 };
 
 static const value_string ietf_6top_generation_numbers[] = {
-    { 0, "clean" },
-    { 1, "counter" },
-    { 2, "counter" },
-    { 3, "reserved" },
+    { 0, "Clear" },
+    { 1, "Lollipop Counter Value" },
+    { 2, "Lollipop Counter Value" },
+    { 3, "Lollipop Counter Value" },
+    { 4, "Lollipop Counter Value" },
+    { 5, "Lollipop Counter Value" },
+    { 6, "Lollipop Counter Value" },
+    { 7, "Lollipop Counter Value" },
+    { 8, "Lollipop Counter Value" },
+    { 9, "Lollipop Counter Value" },
+    { 10, "Reserved" },
+    { 11, "Reserved" },
+    { 12, "Reserved" },
+    { 13, "Reserved" },
+    { 14, "Reserved" },
+    { 15, "Reserved" },
     { 0, NULL}
 };
 
@@ -2118,21 +2132,21 @@ dissect_802154_tsch_slotframe_link(tvbuff_t *tvb, proto_tree *tree, guint16 psie
 static int
 dissect_ieee802154_6top(tvbuff_t *tvb, packet_info *pinfo, proto_tree *p_inf_elem_tree, guint offset, gint pie_length)
 {
-    const guint8 supported_6p_version = 1;
+    const guint8 supported_6p_version = 0x00;
 
     guint8     subie;
     guint8     version;
     guint8     type;
     guint8     code;
     guint8     seqnum;
-    guint8     gab;
-    guint8     gba;
+    guint8     gen;
+    guint8     num_cells;
     int        orig_offset = offset;
     gboolean   have_cell_list = FALSE;
     int        i;
     proto_tree *sixtop_tree = NULL;
     proto_tree *version_type_tree = NULL;
-    proto_tree *seqnum_gab_gba_tree = NULL;
+    proto_tree *seqnum_gen_tree = NULL;
     proto_tree *cell_list_tree = NULL;
     proto_tree *cell_tree = NULL;
     proto_item *type_item = NULL;
@@ -2160,8 +2174,7 @@ dissect_ieee802154_6top(tvbuff_t *tvb, packet_info *pinfo, proto_tree *p_inf_ele
     type = (tvb_get_guint8(tvb, offset + 1) & IETF_6TOP_TYPE) >> 4;
     code = tvb_get_guint8(tvb, offset + 2);
     seqnum = tvb_get_guint8(tvb, offset + 4) & IETF_6TOP_SEQNUM;
-    gab = (tvb_get_guint8(tvb, offset + 4) & IETF_6TOP_GAB) >> 4;
-    gba = (tvb_get_guint8(tvb, offset + 4) & IETF_6TOP_GBA) >> 6;
+    gen = (tvb_get_guint8(tvb, offset + 4) & IETF_6TOP_GEN) >> 4;
 
     proto_tree_add_item(p_inf_elem_tree, hf_ieee802154_p_ie_ietf_sub_id, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 
@@ -2173,11 +2186,10 @@ dissect_ieee802154_6top(tvbuff_t *tvb, packet_info *pinfo, proto_tree *p_inf_ele
     proto_tree_add_item(version_type_tree, hf_ieee802154_6top_flags_reserved, tvb, offset + 1, 1, ENC_LITTLE_ENDIAN);
     code_item = proto_tree_add_item(sixtop_tree, hf_ieee802154_6top_code, tvb, offset + 2, 1, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(sixtop_tree, hf_ieee802154_6top_sfid, tvb, offset + 3, 1, ENC_LITTLE_ENDIAN);
-    seqnum_gab_gba_tree = proto_tree_add_subtree_format(sixtop_tree, tvb, offset + 4, 1, ett_ieee802154_p_ie_6top_seqnum_gab_gba, NULL,
-                                                        "Seqnum: %u, GAB: %u, GBA: %u", seqnum, gab, gba);
-    proto_tree_add_item(seqnum_gab_gba_tree, hf_ieee802154_6top_seqnum, tvb, offset + 4, 1, ENC_LITTLE_ENDIAN);
-    proto_tree_add_item(seqnum_gab_gba_tree, hf_ieee802154_6top_gab, tvb, offset + 4, 1, ENC_LITTLE_ENDIAN);
-    proto_tree_add_item(seqnum_gab_gba_tree, hf_ieee802154_6top_gba, tvb, offset + 4, 1, ENC_LITTLE_ENDIAN);
+    seqnum_gen_tree = proto_tree_add_subtree_format(sixtop_tree, tvb, offset + 4, 1, ett_ieee802154_p_ie_6top_seqnum_gen, NULL,
+                                                    "Seqnum: %u, GEN: %u", seqnum, gen);
+    proto_tree_add_item(seqnum_gen_tree, hf_ieee802154_6top_seqnum, tvb, offset + 4, 1, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(seqnum_gen_tree, hf_ieee802154_6top_gen, tvb, offset + 4, 1, ENC_LITTLE_ENDIAN);
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "6top");
     if (type == IETF_6TOP_TYPE_REQUEST) {
@@ -2197,19 +2209,21 @@ dissect_ieee802154_6top(tvbuff_t *tvb, packet_info *pinfo, proto_tree *p_inf_ele
         switch (code) {
         case IETF_6TOP_CMD_ADD:
         case IETF_6TOP_CMD_DELETE:
+        case IETF_6TOP_CMD_RELOCATE:
             if (pie_length < 4) {
                 break;
             }
             proto_tree_add_item(sixtop_tree, hf_ieee802154_6top_metadata, tvb, offset, 2, ENC_LITTLE_ENDIAN);
             proto_tree_add_bitmask(sixtop_tree, tvb, offset + 2, hf_ieee802154_6top_cell_options, ett_ieee802154_p_ie_6top_cell_options, cell_options, ENC_LITTLE_ENDIAN);
             proto_tree_add_item(sixtop_tree, hf_ieee802154_6top_num_cells, tvb, offset + 3, 1, ENC_LITTLE_ENDIAN);
+            num_cells = tvb_get_guint8(tvb, offset + 3);
             pie_length -= 4;
             offset += 4;
             if (pie_length > 0 && (pie_length % 4) == 0) {
                 have_cell_list = TRUE;
             }
             break;
-        case IETF_6TOP_CMD_STATUS:
+        case IETF_6TOP_CMD_COUNT:
             if (pie_length < 3) {
                 break;
             }
@@ -2247,22 +2261,24 @@ dissect_ieee802154_6top(tvbuff_t *tvb, packet_info *pinfo, proto_tree *p_inf_ele
         switch(code) {
         case IETF_6TOP_RC_SUCCESS:
             if (pie_length > 0) {
-                if (pie_length == 1) {
-                    proto_tree_add_item(sixtop_tree, hf_ieee802154_6top_num_cells, tvb, offset, 1, ENC_LITTLE_ENDIAN);
-                    pie_length -= 1;
-                    offset += 1;
+                if (pie_length == 2) {
+                    proto_tree_add_item(sixtop_tree, hf_ieee802154_6top_num_cells, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+                    pie_length -= 2;
+                    offset += 2;
                 } else if ((pie_length % 4) == 0) {
                     have_cell_list = TRUE;
                 }
             }
             break;
-        case IETF_6TOP_RC_ERR_VER:
-        case IETF_6TOP_RC_ERR_SFID:
-        case IETF_6TOP_RC_ERR_GEN:
-        case IETF_6TOP_RC_ERR_BUSY:
-        case IETF_6TOP_RC_ERR_NORES:
-        case IETF_6TOP_RC_ERR_RESET:
-        case IETF_6TOP_RC_ERR:
+        case IETF_6TOP_RC_ERROR:
+        case IETF_6TOP_RC_EOL:
+        case IETF_6TOP_RC_RESET:
+        case IETF_6TOP_RC_VER_ERR:
+        case IETF_6TOP_RC_SFID_ERR:
+        case IETF_6TOP_RC_GEN_ERR:
+        case IETF_6TOP_RC_BUSY:
+        case IETF_6TOP_RC_NORES:
+        case IETF_6TOP_RC_CELLLIST_ERR:
             /* They have no other field */
             break;
         default:
@@ -2276,13 +2292,34 @@ dissect_ieee802154_6top(tvbuff_t *tvb, packet_info *pinfo, proto_tree *p_inf_ele
     }
 
     if (have_cell_list) {
-        cell_list_tree = proto_tree_add_subtree_format(sixtop_tree, tvb, offset, pie_length, ett_ieee802154_p_ie_6top_cell_list, NULL,
-                                                       "Cell List");
-        for (i = 0; pie_length > 0; pie_length -= 4, offset += 4, i++) {
-            cell_tree = proto_tree_add_subtree_format(cell_list_tree, tvb, offset, 4, ett_ieee802154_p_ie_6top_cell, NULL,
-                                                      "Cell [%u]", i);
-            proto_tree_add_item(cell_tree, hf_ieee802154_6top_slot_offset, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-            proto_tree_add_item(cell_tree, hf_ieee802154_6top_channel_offset, tvb, offset + 2, 2, ENC_LITTLE_ENDIAN);
+        if (type == IETF_6TOP_TYPE_REQUEST && code == IETF_6TOP_CMD_RELOCATE) {
+            cell_list_tree = proto_tree_add_subtree_format(sixtop_tree, tvb, offset, pie_length, ett_ieee802154_p_ie_6top_cell_list, NULL,
+                                                           "Relocation Cell List");
+            /* num_cells is expected to be set properly */
+            for (i = 0; i < num_cells; offset += 4, i++) {
+                cell_tree = proto_tree_add_subtree_format(cell_list_tree, tvb, offset, 4, ett_ieee802154_p_ie_6top_cell, NULL,
+                                                          "Cell [%u]", i);
+                proto_tree_add_item(cell_tree, hf_ieee802154_6top_slot_offset, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+                proto_tree_add_item(cell_tree, hf_ieee802154_6top_channel_offset, tvb, offset + 2, 2, ENC_LITTLE_ENDIAN);
+            }
+            pie_length -= num_cells * 4;
+            cell_list_tree = proto_tree_add_subtree_format(sixtop_tree, tvb, offset, pie_length, ett_ieee802154_p_ie_6top_cell_list, NULL,
+                                                           "Candidate Cell List");
+            for (i = 0; pie_length > 0; pie_length -= 4, offset += 4, i++) {
+                cell_tree = proto_tree_add_subtree_format(cell_list_tree, tvb, offset, 4, ett_ieee802154_p_ie_6top_cell, NULL,
+                                                          "Cell [%u]", i);
+                proto_tree_add_item(cell_tree, hf_ieee802154_6top_slot_offset, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+                proto_tree_add_item(cell_tree, hf_ieee802154_6top_channel_offset, tvb, offset + 2, 2, ENC_LITTLE_ENDIAN);
+            }
+        } else {
+            cell_list_tree = proto_tree_add_subtree_format(sixtop_tree, tvb, offset, pie_length, ett_ieee802154_p_ie_6top_cell_list, NULL,
+                                                           "Cell List");
+            for (i = 0; pie_length > 0; pie_length -= 4, offset += 4, i++) {
+                cell_tree = proto_tree_add_subtree_format(cell_list_tree, tvb, offset, 4, ett_ieee802154_p_ie_6top_cell, NULL,
+                                                          "Cell [%u]", i);
+                proto_tree_add_item(cell_tree, hf_ieee802154_6top_slot_offset, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+                proto_tree_add_item(cell_tree, hf_ieee802154_6top_channel_offset, tvb, offset + 2, 2, ENC_LITTLE_ENDIAN);
+            }
         }
     }
 
@@ -4386,12 +4423,8 @@ void proto_register_ieee802154(void)
         { "SeqNum", "wpan.6top_seqnum", FT_UINT8, BASE_DEC, NULL, IETF_6TOP_SEQNUM,
           NULL, HFILL }},
 
-        { &hf_ieee802154_6top_gab,
-        { "GAB", "wpan.6top_gab", FT_UINT8, BASE_DEC, VALS(ietf_6top_generation_numbers), IETF_6TOP_GAB,
-          NULL, HFILL }},
-
-        { &hf_ieee802154_6top_gba,
-        { "GBA", "wpan.6top_gba", FT_UINT8, BASE_DEC, VALS(ietf_6top_generation_numbers), IETF_6TOP_GBA,
+        { &hf_ieee802154_6top_gen,
+        { "GEN", "wpan.6top_gen", FT_UINT8, BASE_DEC, VALS(ietf_6top_generation_numbers), IETF_6TOP_GEN,
           NULL, HFILL }},
 
         { &hf_ieee802154_6top_metadata,
@@ -4701,7 +4734,7 @@ void proto_register_ieee802154(void)
         &ett_ieee802154_zboss,
         &ett_ieee802154_p_ie_6top,
         &ett_ieee802154_p_ie_6top_version_type,
-        &ett_ieee802154_p_ie_6top_seqnum_gab_gba,
+        &ett_ieee802154_p_ie_6top_seqnum_gen,
         &ett_ieee802154_p_ie_6top_cell_options,
         &ett_ieee802154_p_ie_6top_cell_list,
         &ett_ieee802154_p_ie_6top_cell
@@ -4735,11 +4768,11 @@ void proto_register_ieee802154(void)
         { &ei_ieee802154_6top_unsupported_type, { "wpan.6top_unsupported_type", PI_PROTOCOL, PI_WARN,
                 "Unsupported Type of Message", EXPFILL }},
         { &ei_ieee802154_6top_unsupported_command, { "wpan.6top_unsupported_command", PI_PROTOCOL, PI_WARN,
-                "Unsupported 6Top command", EXPFILL }},
+                "Unsupported 6top command", EXPFILL }},
         { &ei_ieee802154_time_correction_error, { "wpan.time_correction.error", PI_PROTOCOL, PI_WARN,
                 "Incorrect value. Reference: IEEE-802.15.4-2015. Table 7-8: Values of the Time Sync Info field for ACK with timing Information", EXPFILL}},
         { &ei_ieee802154_6top_unsupported_return_code, { "wpan.6top_unsupported_code", PI_PROTOCOL, PI_WARN,
-                "Unsupported 6Top return code", EXPFILL }},
+                "Unsupported 6top return code", EXPFILL }},
         { &ei_ieee802154_ie_unsupported_element_id, { "wpan.ie_unsupported_element_id", PI_PROTOCOL, PI_WARN,
                 "Unsupported IE element ID", EXPFILL }},
         { &ei_ieee802154_ie_unknown_element_id, { "wpan.ie_unknown_element_id", PI_PROTOCOL, PI_WARN,
